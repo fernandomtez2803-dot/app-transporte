@@ -2,7 +2,8 @@
 App de comparación de tarifas de transporte — Agroserc
 Transportistas: RDA Ramoneda, Antonio Marco, Transaher, Carreras
 """
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from functools import wraps
 import sys
 import os
 
@@ -11,14 +12,51 @@ sys.path.insert(0, os.path.dirname(__file__))
 from calculators import ramoneda, antonio_marco, transaher, carreras
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'agroserc-transporte-2026-clave-secreta')
+
+# ── Contraseña de acceso ──
+APP_PASSWORD = os.environ.get('APP_PASSWORD', '2468')
+
+
+def login_required(f):
+    """Decorador que protege las rutas, redirigiendo al login si no hay sesión."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if session.get('authenticated'):
+        return redirect(url_for('index'))
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == APP_PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        else:
+            error = 'Contraseña incorrecta'
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 
 @app.route('/calcular', methods=['POST'])
+@login_required
 def calcular():
     datos = request.get_json()
 
@@ -109,6 +147,7 @@ def calcular():
 
 
 @app.route('/provincias')
+@login_required
 def provincias():
     """Lista de provincias/destinos disponibles para autocompletar."""
     lista = [

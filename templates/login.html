@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acceso — Comparador de Tarifas Agroserc</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0e2f44 0%, #1a5276 40%, #2e86c1 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    animation: fadeUp 0.5s ease-out;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .login-icon {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+  }
+
+  .login-card h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1a5276;
+    margin-bottom: 4px;
+  }
+
+  .login-card p {
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 28px;
+  }
+
+  .form-group {
+    text-align: left;
+    margin-bottom: 18px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .form-group input {
+    width: 100%;
+    border: 1.5px solid #d0d7e2;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 1.1rem;
+    letter-spacing: 0.2em;
+    text-align: center;
+    color: #222;
+    background: #fafbfc;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .form-group input:focus {
+    outline: none;
+    border-color: #2e86c1;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(46,134,193,0.15);
+  }
+
+  .btn-login {
+    display: block;
+    width: 100%;
+    background: linear-gradient(135deg, #1a5276, #2e86c1);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 13px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.02em;
+    margin-top: 6px;
+  }
+  .btn-login:hover { opacity: 0.92; transform: translateY(-1px); }
+  .btn-login:active { transform: translateY(0); }
+
+  .error-msg {
+    background: #fdf0f0;
+    border: 1px solid #e74c3c;
+    color: #c0392b;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.88rem;
+    animation: shake 0.4s ease-in-out;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+
+  .footer-text {
+    margin-top: 24px;
+    font-size: 0.75rem;
+    color: #aaa;
+  }
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <div class="login-icon">🔒</div>
+  <h1>Acceso Restringido</h1>
+  <p>Comparador de Tarifas — Agroserc</p>
+
+  {% if error %}
+  <div class="error-msg">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/login">
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" name="password" placeholder="••••" autofocus required>
+    </div>
+    <button type="submit" class="btn-login">Entrar</button>
+  </form>
+
+  <div class="footer-text">Agroserc S.A. · Uso interno</div>
+</div>
+
+</body>
+</html>
