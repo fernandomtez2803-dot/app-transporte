@@ -150,8 +150,9 @@ async function iniciarCamara() {
     document.getElementById('btn-start-cam').style.display = 'none';
     document.getElementById('btn-stop-cam').style.display = 'flex';
     document.getElementById('btn-capture').disabled = false;
+    document.getElementById('btn-detect').disabled = false;
 
-    setStatus('success', '✅ Cámara conectada');
+    setStatus('success', '✅ Cámara conectada — pulsa Detectar o activa Tiempo Real');
   } catch (e) {
     setStatus('error', '❌ Error al acceder a la cámara: ' + e.message);
   }
@@ -210,9 +211,17 @@ function volverALive() {
 // ════════════════════════════════════════
 // DETECCIÓN YOLO
 // ════════════════════════════════════════
+let realtimeActive = false;
+let realtimeTimer = null;
+
 async function detectarYOLO() {
+  // Si no hay captura pero la cámara está activa → capturar automáticamente
+  if (!CAM.capturedImage && CAM.stream) {
+    capturarFrame();
+  }
+
   if (!CAM.capturedImage) {
-    setStatus('error', 'Primero captura un frame');
+    setStatus('error', '❌ Inicia la cámara primero');
     return;
   }
 
@@ -244,12 +253,136 @@ async function detectarYOLO() {
     dibujarDetecciones();
     actualizarListaDetecciones();
 
-    setStatus('success', `✅ ${CAM.detections.length} objeto(s) detectado(s)`);
+    if (!realtimeActive) {
+      setStatus('success', `✅ ${CAM.detections.length} objeto(s) detectado(s)`);
+    }
   } catch (e) {
-    setStatus('error', '❌ Error en detección: ' + e.message);
+    if (!realtimeActive) {
+      setStatus('error', '❌ Error en detección: ' + e.message);
+    }
   }
 
   document.getElementById('btn-detect').disabled = false;
+}
+
+// ── Detección en tiempo real ──
+function toggleRealtime() {
+  const btn = document.getElementById('btn-realtime');
+
+  if (realtimeActive) {
+    // Desactivar
+    realtimeActive = false;
+    if (realtimeTimer) clearTimeout(realtimeTimer);
+    realtimeTimer = null;
+    btn.classList.remove('active');
+    btn.textContent = '🔴 Tiempo real';
+    document.getElementById('btn-detect').disabled = false;
+    document.getElementById('btn-capture').disabled = false;
+    setStatus('info', 'Detección en tiempo real desactivada');
+    return;
+  }
+
+  if (!CAM.stream) {
+    setStatus('error', '❌ Inicia la cámara primero');
+    return;
+  }
+
+  // Activar modo tiempo real
+  realtimeActive = true;
+  btn.classList.add('active');
+  btn.textContent = '⏹ Parar tiempo real';
+  document.getElementById('btn-detect').disabled = true;
+  document.getElementById('btn-capture').disabled = true;
+  setStatus('loading', '🔴 Detección en tiempo real activa...');
+
+  loopRealtime();
+}
+
+async function loopRealtime() {
+  if (!realtimeActive || !CAM.stream) {
+    realtimeActive = false;
+    return;
+  }
+
+  // Capturar frame actual del vídeo directamente
+  CAM.canvas.width = CAM.video.videoWidth;
+  CAM.canvas.height = CAM.video.videoHeight;
+  CAM.ctx.drawImage(CAM.video, 0, 0);
+  CAM.capturedImage = CAM.ctx.getImageData(0, 0, CAM.canvas.width, CAM.canvas.height);
+
+  try {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = CAM.canvas.width;
+    tempCanvas.height = CAM.canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.putImageData(CAM.capturedImage, 0, 0);
+    const imageData = tempCanvas.toDataURL('image/jpeg', 0.7);
+
+    const resp = await fetch('/api/detectar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageData })
+    });
+
+    const data = await resp.json();
+    if (resp.ok) {
+      CAM.detections = data.detections || [];
+
+      // Redibujar: frame actual + bounding boxes
+      CAM.ctx.drawImage(CAM.video, 0, 0);
+      dibujarBoundingBoxes();
+      actualizarListaDetecciones();
+
+      const objCount = CAM.detections.length;
+      setStatus('loading', `🔴 Tiempo real — ${objCount} objeto(s) detectado(s)`);
+    }
+  } catch (e) {
+    // Silenciar errores en modo real-time para no spammear
+  }
+
+  // Siguiente frame (~1 FPS para no saturar el servidor)
+  if (realtimeActive) {
+    realtimeTimer = setTimeout(loopRealtime, 800);
+  }
+}
+
+// Dibujar solo los bounding boxes sin tocar la imagen de fondo (para modo realtime)
+function dibujarBoundingBoxes() {
+  const colors = {
+    'person': '#e74c3c',
+    'car': '#3498db',
+    'truck': '#2ecc71',
+    'box': '#f39c12',
+    'suitcase': '#9b59b6',
+    'bottle': '#1abc9c',
+    'cup': '#e67e22',
+    'chair': '#95a5a6',
+    'default': '#2e86c1'
+  };
+
+  CAM.detections.forEach(det => {
+    const color = colors[det.class] || colors.default;
+    const x = det.x1;
+    const y = det.y1;
+    const w = det.width;
+    const h = det.height;
+
+    // Bounding box con fondo semi-transparente
+    CAM.ctx.strokeStyle = color;
+    CAM.ctx.lineWidth = 3;
+    CAM.ctx.strokeRect(x, y, w, h);
+
+    // Fondo del label
+    const label = `${det.class} ${(det.confidence * 100).toFixed(0)}%`;
+    CAM.ctx.font = 'bold 14px Segoe UI';
+    const textWidth = CAM.ctx.measureText(label).width;
+
+    CAM.ctx.fillStyle = color;
+    CAM.ctx.fillRect(x, y - 24, textWidth + 12, 24);
+
+    CAM.ctx.fillStyle = 'white';
+    CAM.ctx.fillText(label, x + 6, y - 7);
+  });
 }
 
 function dibujarDetecciones() {
