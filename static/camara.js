@@ -10,17 +10,6 @@ const CAM = {
   ctx: null,
   capturedImage: null,       // ImageData del frame capturado
   detections: [],            // Resultados YOLO
-  calibration: {
-    active: false,           // Modo calibración activo
-    points: [],              // [{x, y}, {x, y}]
-    refDistanceCm: 120,      // Distancia de referencia en cm (euro pallet largo)
-    pxPerCm: null            // Ratio calculado
-  },
-  measuring: {
-    active: false,           // Modo medición activo
-    points: [],              // [{x, y}, {x, y}]
-    target: null             // 'largo', 'ancho', 'alto'
-  },
   dimensions: {
     largo: 0,
     ancho: 0,
@@ -36,9 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Enumerar cámaras disponibles
   enumerarCamaras();
-
-  // Eventos de canvas para calibración/medición
-  CAM.canvas.addEventListener('click', handleCanvasClick);
 
   // Eventos de inputs de dimensiones
   ['dim-largo', 'dim-ancho', 'dim-alto'].forEach(id => {
@@ -403,7 +389,7 @@ function dibujarDetecciones() {
     'default': '#2e86c1'
   };
 
-  CAM.detections.forEach(det => {
+  CAM.detections.forEach((det, i) => {
     const color = colors[det.class] || colors.default;
     const x = det.x1;
     const y = det.y1;
@@ -415,8 +401,8 @@ function dibujarDetecciones() {
     CAM.ctx.lineWidth = 3;
     CAM.ctx.strokeRect(x, y, w, h);
 
-    // Fondo del label
-    const label = `${det.class} ${(det.confidence * 100).toFixed(0)}%`;
+    // Label con índice
+    const label = `#${i+1} ${det.class} ${(det.confidence * 100).toFixed(0)}%`;
     CAM.ctx.font = 'bold 14px Segoe UI';
     const textWidth = CAM.ctx.measureText(label).width;
 
@@ -425,231 +411,170 @@ function dibujarDetecciones() {
 
     CAM.ctx.fillStyle = 'white';
     CAM.ctx.fillText(label, x + 5, y - 6);
-  });
 
-  // Dibujar puntos de calibración si existen
-  dibujarPuntosCalibración();
-  dibujarPuntosMedición();
+    // Si hay estimación, mostrar dimensiones en cm sobre la caja
+    if (det._estimatedW && det._estimatedH) {
+      const dimLabel = `≈ ${det._estimatedW}×${det._estimatedH} cm`;
+      CAM.ctx.font = 'bold 13px Segoe UI';
+      const dimWidth = CAM.ctx.measureText(dimLabel).width;
+      CAM.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      CAM.ctx.fillRect(x, y + h + 2, dimWidth + 10, 20);
+      CAM.ctx.fillStyle = '#2ecc71';
+      CAM.ctx.fillText(dimLabel, x + 5, y + h + 16);
+    }
+  });
 }
 
 function actualizarListaDetecciones() {
   const lista = document.getElementById('detection-list');
+  const refSelect = document.getElementById('ref-object');
+
   if (CAM.detections.length === 0) {
     lista.innerHTML = '<p class="detection-empty">Sin detecciones</p>';
+    refSelect.innerHTML = '<option value="">— Detecta objetos primero —</option>';
     return;
   }
 
-  lista.innerHTML = CAM.detections.map(det => `
+  // Lista visual
+  lista.innerHTML = CAM.detections.map((det, i) => `
     <div class="detection-item">
-      <span class="detection-class">${esc(det.class)}</span>
+      <span class="detection-class">#${i+1} ${esc(det.class)}</span>
       <span class="detection-conf">${(det.confidence * 100).toFixed(0)}%</span>
     </div>
   `).join('');
+
+  // Dropdown de referencia
+  const prevVal = refSelect.value;
+  refSelect.innerHTML = CAM.detections.map((det, i) =>
+    `<option value="${i}">#${i+1} ${esc(det.class)} (${Math.round(det.width)}×${Math.round(det.height)} px)</option>`
+  ).join('');
+
+  // Seleccionar el más grande por defecto (probablemente el pallet/objeto principal)
+  let biggestIdx = 0;
+  let biggestArea = 0;
+  CAM.detections.forEach((det, i) => {
+    const area = det.width * det.height;
+    if (area > biggestArea) { biggestArea = area; biggestIdx = i; }
+  });
+  refSelect.value = prevVal || biggestIdx;
 }
 
 
 // ════════════════════════════════════════
-// CALIBRACIÓN (referencia pallet)
+// ESTIMACIÓN AUTOMÁTICA
 // ════════════════════════════════════════
-function toggleCalibrar() {
-  const btn = document.getElementById('btn-calibrate');
-
-  if (CAM.calibration.active) {
-    // Cancelar
-    CAM.calibration.active = false;
-    CAM.calibration.points = [];
-    btn.classList.remove('active');
-    btn.textContent = '📏 Calibrar referencia';
-    CAM.canvas.classList.remove('crosshair-cursor');
-    dibujarDetecciones();
+function autoEstimar() {
+  if (CAM.detections.length === 0) {
+    setStatus('error', '❌ Primero detecta objetos con YOLO');
     return;
   }
 
-  // Activar modo calibración
-  CAM.calibration.active = true;
-  CAM.calibration.points = [];
-  CAM.measuring.active = false;
-  btn.classList.add('active');
-  btn.textContent = '❌ Cancelar calibración';
-  CAM.canvas.classList.add('crosshair-cursor');
+  const refIdx = parseInt(document.getElementById('ref-object').value);
+  const refWidthCm = parseFloat(document.getElementById('ref-width-cm').value) || 120;
+  const refHeightCm = parseFloat(document.getElementById('ref-height-cm').value) || 80;
 
-  setStatus('info', '📏 Haz clic en 2 puntos del pallet cuya distancia conozcas (ej: el lado largo = 120cm)');
-}
-
-function toggleMedirAltura() {
-  const btn = document.getElementById('btn-measure-h');
-
-  if (CAM.measuring.active) {
-    CAM.measuring.active = false;
-    CAM.measuring.points = [];
-    btn.classList.remove('active');
-    btn.textContent = '📐 Medir en imagen';
-    CAM.canvas.classList.remove('crosshair-cursor');
-    dibujarDetecciones();
+  if (isNaN(refIdx) || !CAM.detections[refIdx]) {
+    setStatus('error', '❌ Selecciona un objeto de referencia');
     return;
   }
 
-  if (!CAM.calibration.pxPerCm) {
-    setStatus('error', '⚠ Primero calibra la referencia');
-    return;
+  const refDet = CAM.detections[refIdx];
+  const pxPerCmW = refDet.width / refWidthCm;
+  const pxPerCmH = refDet.height / refHeightCm;
+
+  // Anotar dimensiones estimadas en cada detección
+  CAM.detections.forEach((det, i) => {
+    det._estimatedW = Math.round(det.width / pxPerCmW);
+    det._estimatedH = Math.round(det.height / pxPerCmH);
+  });
+
+  // Encontrar el objeto más grande que NO sea la referencia (probablemente la carga)
+  let targetIdx = -1;
+  let targetArea = 0;
+  CAM.detections.forEach((det, i) => {
+    if (i === refIdx) return;
+    const area = det.width * det.height;
+    if (area > targetArea) { targetArea = area; targetIdx = i; }
+  });
+
+  // Si solo hay un objeto (la referencia), usar ese mismo
+  if (targetIdx === -1) targetIdx = refIdx;
+
+  const target = CAM.detections[targetIdx];
+  const estLargo = Math.round(target.width / pxPerCmW);
+  const estAncho = Math.round(target.width / pxPerCmW); // Asumimos cuadrado en planta si solo vemos un ángulo
+  const estAlto = Math.round(target.height / pxPerCmH);
+
+  // Si el target es la referencia, usar las medidas reales proporcionadas
+  if (targetIdx === refIdx) {
+    document.getElementById('dim-largo').value = refWidthCm;
+    document.getElementById('dim-ancho').value = refHeightCm;
+    document.getElementById('dim-alto').value = Math.round(refHeightCm * 0.75); // Estimación razonable
+  } else {
+    document.getElementById('dim-largo').value = estLargo;
+    document.getElementById('dim-ancho').value = estLargo; // Mejor aproximación sin vista superior
+    document.getElementById('dim-alto').value = estAlto;
   }
 
-  CAM.measuring.active = true;
-  CAM.measuring.points = [];
-  CAM.calibration.active = false;
-  btn.classList.add('active');
-  btn.textContent = '❌ Cancelar medición';
-  CAM.canvas.classList.add('crosshair-cursor');
-
-  // Seleccionar qué dimensión medir
-  const target = document.getElementById('measure-target').value;
-  CAM.measuring.target = target;
-
-  setStatus('info', `📐 Haz clic en 2 puntos para medir el ${target}`);
-}
-
-
-// ── Manejo de clics en canvas ──
-function handleCanvasClick(e) {
-  if (!CAM.calibration.active && !CAM.measuring.active) return;
-
-  const rect = CAM.canvas.getBoundingClientRect();
-  const scaleX = CAM.canvas.width / rect.width;
-  const scaleY = CAM.canvas.height / rect.height;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top) * scaleY;
-
-  if (CAM.calibration.active) {
-    CAM.calibration.points.push({ x, y });
-    dibujarDetecciones();
-
-    if (CAM.calibration.points.length === 2) {
-      completarCalibración();
-    }
-  } else if (CAM.measuring.active) {
-    CAM.measuring.points.push({ x, y });
-    dibujarDetecciones();
-
-    if (CAM.measuring.points.length === 2) {
-      completarMedición();
-    }
-  }
-}
-
-function completarCalibración() {
-  const p1 = CAM.calibration.points[0];
-  const p2 = CAM.calibration.points[1];
-  const distPx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-
-  const refCm = parseFloat(document.getElementById('ref-distance').value) || 120;
-  CAM.calibration.refDistanceCm = refCm;
-  CAM.calibration.pxPerCm = distPx / refCm;
-
-  // Actualizar UI
-  CAM.calibration.active = false;
-  const btn = document.getElementById('btn-calibrate');
-  btn.classList.remove('active');
-  btn.textContent = '✅ Recalibrar referencia';
-  CAM.canvas.classList.remove('crosshair-cursor');
-
-  document.getElementById('calibration-status').className = 'calibration-status done';
-  document.getElementById('calibration-status').textContent =
-    `✅ Calibrado: ${CAM.calibration.pxPerCm.toFixed(2)} px/cm (${refCm} cm = ${distPx.toFixed(0)} px)`;
-
-  // Habilitar medición
-  document.getElementById('btn-measure-h').disabled = false;
-
-  dibujarDetecciones();
-  setStatus('success', `✅ Calibración completada: ${CAM.calibration.pxPerCm.toFixed(2)} px/cm`);
-}
-
-function completarMedición() {
-  const p1 = CAM.measuring.points[0];
-  const p2 = CAM.measuring.points[1];
-  const distPx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-  const distCm = distPx / CAM.calibration.pxPerCm;
-
-  const target = CAM.measuring.target;
-  const inputId = `dim-${target}`;
-  document.getElementById(inputId).value = Math.round(distCm);
-  CAM.dimensions[target] = Math.round(distCm);
-
-  // Reset medición
-  CAM.measuring.active = false;
-  const btn = document.getElementById('btn-measure-h');
-  btn.classList.remove('active');
-  btn.textContent = '📐 Medir en imagen';
-  CAM.canvas.classList.remove('crosshair-cursor');
-
-  dibujarDetecciones();
   calcularVolumen();
 
-  setStatus('success', `📐 ${target}: ${Math.round(distCm)} cm (${distPx.toFixed(0)} px)`);
+  // Redibujar con dimensiones estimadas
+  if (CAM.capturedImage) {
+    CAM.ctx.putImageData(CAM.capturedImage, 0, 0);
+  }
+  dibujarDeteccionesConEstimaciones();
+
+  // Mostrar estado
+  const status = document.getElementById('calibration-status');
+  status.style.display = 'block';
+  status.className = 'calibration-status done';
+  status.textContent = `✅ Ratio: ${pxPerCmW.toFixed(2)} px/cm — Ref: ${refDet.class} #${refIdx+1}`;
+
+  setStatus('success', `✅ Dimensiones estimadas automáticamente (puedes ajustar manualmente)`);
 }
 
+function dibujarDeteccionesConEstimaciones() {
+  const colors = {
+    'person': '#e74c3c', 'car': '#3498db', 'truck': '#2ecc71',
+    'box': '#f39c12', 'suitcase': '#9b59b6', 'bottle': '#1abc9c',
+    'cup': '#e67e22', 'chair': '#95a5a6', 'default': '#2e86c1'
+  };
 
-// ── Dibujar puntos y líneas ──
-function dibujarPuntosCalibración() {
-  const pts = CAM.calibration.points;
-  if (pts.length === 0) return;
+  CAM.detections.forEach((det, i) => {
+    const color = colors[det.class] || colors.default;
+    const x = det.x1, y = det.y1, w = det.width, h = det.height;
 
-  CAM.ctx.fillStyle = '#f39c12';
-  pts.forEach(p => {
-    CAM.ctx.beginPath();
-    CAM.ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-    CAM.ctx.fill();
+    // Bounding box
+    CAM.ctx.strokeStyle = color;
+    CAM.ctx.lineWidth = 3;
+    CAM.ctx.strokeRect(x, y, w, h);
+
+    // Label
+    const label = `#${i+1} ${det.class} ${(det.confidence * 100).toFixed(0)}%`;
+    CAM.ctx.font = 'bold 14px Segoe UI';
+    const tw = CAM.ctx.measureText(label).width;
+    CAM.ctx.fillStyle = color;
+    CAM.ctx.fillRect(x, y - 24, tw + 12, 24);
+    CAM.ctx.fillStyle = 'white';
+    CAM.ctx.fillText(label, x + 6, y - 7);
+
+    // Dimensiones estimadas
+    if (det._estimatedW && det._estimatedH) {
+      // Ancho (línea horizontal abajo)
+      const wLabel = `${det._estimatedW} cm`;
+      CAM.ctx.font = 'bold 13px Segoe UI';
+      CAM.ctx.fillStyle = '#2ecc71';
+      CAM.ctx.fillText(`↔ ${wLabel}`, x + 4, y + h + 16);
+
+      // Alto (línea vertical derecha)
+      const hLabel = `${det._estimatedH} cm`;
+      CAM.ctx.save();
+      CAM.ctx.translate(x + w + 16, y + h / 2);
+      CAM.ctx.rotate(-Math.PI / 2);
+      CAM.ctx.fillText(`↕ ${hLabel}`, 0, 0);
+      CAM.ctx.restore();
+    }
   });
-
-  if (pts.length === 2) {
-    CAM.ctx.strokeStyle = '#f39c12';
-    CAM.ctx.lineWidth = 2;
-    CAM.ctx.setLineDash([6, 4]);
-    CAM.ctx.beginPath();
-    CAM.ctx.moveTo(pts[0].x, pts[0].y);
-    CAM.ctx.lineTo(pts[1].x, pts[1].y);
-    CAM.ctx.stroke();
-    CAM.ctx.setLineDash([]);
-
-    // Mostrar distancia
-    const midX = (pts[0].x + pts[1].x) / 2;
-    const midY = (pts[0].y + pts[1].y) / 2;
-    const refCm = CAM.calibration.refDistanceCm;
-    CAM.ctx.font = 'bold 16px Segoe UI';
-    CAM.ctx.fillStyle = '#f39c12';
-    CAM.ctx.fillText(`${refCm} cm (ref)`, midX + 10, midY - 10);
-  }
-}
-
-function dibujarPuntosMedición() {
-  const pts = CAM.measuring.points;
-  if (pts.length === 0) return;
-
-  CAM.ctx.fillStyle = '#3498db';
-  pts.forEach(p => {
-    CAM.ctx.beginPath();
-    CAM.ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-    CAM.ctx.fill();
-  });
-
-  if (pts.length === 2 && CAM.calibration.pxPerCm) {
-    CAM.ctx.strokeStyle = '#3498db';
-    CAM.ctx.lineWidth = 2;
-    CAM.ctx.setLineDash([6, 4]);
-    CAM.ctx.beginPath();
-    CAM.ctx.moveTo(pts[0].x, pts[0].y);
-    CAM.ctx.lineTo(pts[1].x, pts[1].y);
-    CAM.ctx.stroke();
-    CAM.ctx.setLineDash([]);
-
-    // Mostrar distancia real
-    const distPx = Math.sqrt(Math.pow(pts[1].x - pts[0].x, 2) + Math.pow(pts[1].y - pts[0].y, 2));
-    const distCm = distPx / CAM.calibration.pxPerCm;
-    const midX = (pts[0].x + pts[1].x) / 2;
-    const midY = (pts[0].y + pts[1].y) / 2;
-    CAM.ctx.font = 'bold 16px Segoe UI';
-    CAM.ctx.fillStyle = '#3498db';
-    CAM.ctx.fillText(`${Math.round(distCm)} cm`, midX + 10, midY - 10);
-  }
 }
 
 

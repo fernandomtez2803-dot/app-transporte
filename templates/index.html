@@ -306,31 +306,38 @@
           </div>
         </div>
 
-        <!-- Calibración -->
+        <!-- Estimación automática -->
         <div class="panel-card">
-          <h3>📏 Calibración</h3>
-          <div class="calibration-section">
-            <div id="calibration-status" class="calibration-status pending">
-              ⏳ Sin calibrar — marca una referencia conocida
-            </div>
-            <div class="calibration-row">
-              <label>Referencia:</label>
-              <input type="number" id="ref-distance" value="120" min="1" step="1">
-              <span>cm</span>
-            </div>
-            <p class="calibration-info">
-              💡 Marca 2 puntos del pallet cuya distancia conozcas.<br>
-              Ej: lado largo del euro pallet = 120 cm
-            </p>
-            <button class="btn-calibrate" id="btn-calibrate" onclick="toggleCalibrar()" disabled>
-              📏 Calibrar referencia
-            </button>
+          <h3>📏 Estimación automática</h3>
+          <p class="calibration-info" style="margin-bottom:10px;">
+            Selecciona un objeto detectado como referencia y pon su medida real.
+            El sistema estimará el resto automáticamente.
+          </p>
+          <div class="calibration-row" style="margin-bottom:8px;">
+            <label>Objeto ref:</label>
+            <select id="ref-object" style="flex:1; border:1.5px solid #d0d7e2; border-radius:6px; padding:6px; font-size:0.82rem;">
+              <option value="">— Detecta objetos primero —</option>
+            </select>
           </div>
+          <div class="calibration-row" style="margin-bottom:8px;">
+            <label>Ancho real:</label>
+            <input type="number" id="ref-width-cm" value="120" min="1" step="1" style="width:70px;">
+            <span>cm</span>
+          </div>
+          <div class="calibration-row">
+            <label>Alto real:</label>
+            <input type="number" id="ref-height-cm" value="80" min="1" step="1" style="width:70px;">
+            <span>cm</span>
+          </div>
+          <button class="btn-calibrate" id="btn-auto-estimate" onclick="autoEstimar()" style="margin-top:10px;">
+            🚀 Estimar dimensiones
+          </button>
+          <div id="calibration-status" class="calibration-status pending" style="margin-top:8px; display:none;"></div>
         </div>
 
-        <!-- Dimensiones -->
+        <!-- Dimensiones + Volumen -->
         <div class="panel-card">
-          <h3>📐 Dimensiones</h3>
+          <h3>📦 Cubicaje</h3>
           <div class="dimension-inputs">
             <div class="dim-row">
               <label>Largo:</label>
@@ -348,21 +355,8 @@
               <span>cm</span>
             </div>
           </div>
-          <div style="display:flex; gap:6px; align-items:center; margin-top:10px;">
-            <select id="measure-target" style="flex:1; border:1.5px solid #d0d7e2; border-radius:6px; padding:6px; font-size:0.82rem;">
-              <option value="largo">Medir largo</option>
-              <option value="ancho">Medir ancho</option>
-              <option value="alto">Medir alto</option>
-            </select>
-            <button class="btn-measure-height" id="btn-measure-h" onclick="toggleMedirAltura()" disabled style="flex:1;">
-              📐 Medir en imagen
-            </button>
-          </div>
-        </div>
 
-        <!-- Volumen -->
-        <div class="panel-card">
-          <div class="volume-result">
+          <div class="volume-result" style="margin-top:14px;">
             <div class="volume-label">Cubicaje calculado</div>
             <div class="volume-value" id="volume-value">0.000</div>
             <div class="volume-unit">m³</div>
