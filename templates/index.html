@@ -161,6 +161,7 @@
     .precio-grande { font-size: 1.8rem; }
   }
 </style>
+<link rel="stylesheet" href="/static/camara.css">
 </head>
 <body>
 
@@ -171,7 +172,18 @@
   </div>
 </header>
 
+<!-- TABS -->
+<div class="tabs-nav">
+  <button class="tab-btn active" data-tab="comparador" onclick="switchTab('comparador')">📊 Comparador</button>
+  <button class="tab-btn" data-tab="camara" onclick="switchTab('camara')">📷 Cámara Cubicaje</button>
+</div>
+
 <div class="container">
+
+  <!-- ═══════════════════════════════════ -->
+  <!-- TAB: COMPARADOR (contenido existente) -->
+  <!-- ═══════════════════════════════════ -->
+  <div id="tab-comparador" class="tab-content active">
 
   <!-- FORMULARIO -->
   <div class="card">
@@ -242,6 +254,128 @@
       </details>
     </div>
   </div>
+
+  </div><!-- /tab-comparador -->
+
+
+  <!-- ═══════════════════════════════════ -->
+  <!-- TAB: CÁMARA CUBICAJE              -->
+  <!-- ═══════════════════════════════════ -->
+  <div id="tab-camara" class="tab-content">
+
+    <!-- Selector de cámara -->
+    <div class="camera-select-row">
+      <label>📹 Cámara:</label>
+      <select id="camera-select">
+        <option value="">Cargando cámaras...</option>
+      </select>
+    </div>
+
+    <div class="camera-layout">
+
+      <!-- COLUMNA IZQUIERDA: Feed + controles -->
+      <div>
+        <div class="camera-feed-wrapper">
+          <div class="camera-placeholder" id="camera-placeholder">
+            <div class="cam-icon">📷</div>
+            <p>Pulsa "Iniciar cámara" para comenzar</p>
+          </div>
+          <video id="webcam" autoplay playsinline></video>
+          <canvas id="detection-canvas"></canvas>
+        </div>
+
+        <div class="camera-controls">
+          <button class="btn-cam btn-start" id="btn-start-cam" onclick="iniciarCamara()">▶ Iniciar cámara</button>
+          <button class="btn-cam btn-stop" id="btn-stop-cam" onclick="detenerCamara()" style="display:none;">⏹ Detener</button>
+          <button class="btn-cam btn-capture" id="btn-capture" onclick="capturarFrame()" disabled>📸 Capturar</button>
+          <button class="btn-cam btn-detect" id="btn-detect" onclick="detectarYOLO()" disabled>🤖 Detectar YOLO</button>
+        </div>
+
+        <div id="cam-status" class="status-msg info" style="margin-top:10px;">Conecta la cámara para empezar</div>
+      </div>
+
+      <!-- COLUMNA DERECHA: Paneles -->
+      <div class="side-panel">
+
+        <!-- Detecciones -->
+        <div class="panel-card">
+          <h3>🎯 Detecciones</h3>
+          <div class="detection-list" id="detection-list">
+            <p class="detection-empty">Sin detecciones</p>
+          </div>
+        </div>
+
+        <!-- Calibración -->
+        <div class="panel-card">
+          <h3>📏 Calibración</h3>
+          <div class="calibration-section">
+            <div id="calibration-status" class="calibration-status pending">
+              ⏳ Sin calibrar — marca una referencia conocida
+            </div>
+            <div class="calibration-row">
+              <label>Referencia:</label>
+              <input type="number" id="ref-distance" value="120" min="1" step="1">
+              <span>cm</span>
+            </div>
+            <p class="calibration-info">
+              💡 Marca 2 puntos del pallet cuya distancia conozcas.<br>
+              Ej: lado largo del euro pallet = 120 cm
+            </p>
+            <button class="btn-calibrate" id="btn-calibrate" onclick="toggleCalibrar()" disabled>
+              📏 Calibrar referencia
+            </button>
+          </div>
+        </div>
+
+        <!-- Dimensiones -->
+        <div class="panel-card">
+          <h3>📐 Dimensiones</h3>
+          <div class="dimension-inputs">
+            <div class="dim-row">
+              <label>Largo:</label>
+              <input type="number" id="dim-largo" placeholder="0" min="0" step="1">
+              <span>cm</span>
+            </div>
+            <div class="dim-row">
+              <label>Ancho:</label>
+              <input type="number" id="dim-ancho" placeholder="0" min="0" step="1">
+              <span>cm</span>
+            </div>
+            <div class="dim-row">
+              <label>Alto:</label>
+              <input type="number" id="dim-alto" placeholder="0" min="0" step="1">
+              <span>cm</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center; margin-top:10px;">
+            <select id="measure-target" style="flex:1; border:1.5px solid #d0d7e2; border-radius:6px; padding:6px; font-size:0.82rem;">
+              <option value="largo">Medir largo</option>
+              <option value="ancho">Medir ancho</option>
+              <option value="alto">Medir alto</option>
+            </select>
+            <button class="btn-measure-height" id="btn-measure-h" onclick="toggleMedirAltura()" disabled style="flex:1;">
+              📐 Medir en imagen
+            </button>
+          </div>
+        </div>
+
+        <!-- Volumen -->
+        <div class="panel-card">
+          <div class="volume-result">
+            <div class="volume-label">Cubicaje calculado</div>
+            <div class="volume-value" id="volume-value">0.000</div>
+            <div class="volume-unit">m³</div>
+            <div class="volume-detail" id="volume-detail">0 × 0 × 0 cm</div>
+          </div>
+          <button class="btn-use-volume" id="btn-use-volume" onclick="usarEnComparador()" disabled>
+            ↗ Usar en comparador de tarifas
+          </button>
+        </div>
+
+      </div><!-- /side-panel -->
+    </div><!-- /camera-layout -->
+
+  </div><!-- /tab-camara -->
 
 </div>
 
@@ -434,5 +568,6 @@ function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 </script>
+<script src="/static/camara.js"></script>
 </body>
 </html>

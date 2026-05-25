@@ -6,6 +6,11 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from functools import wraps
 import sys
 import os
+import base64
+import io
+import numpy as np
+from PIL import Image
+from ultralytics import YOLO
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -16,6 +21,11 @@ app.secret_key = os.environ.get('SECRET_KEY', 'agroserc-transporte-2026-clave-se
 
 # ── Contraseña de acceso ──
 APP_PASSWORD = os.environ.get('APP_PASSWORD', '2468')
+
+# ── Modelo YOLO (se descarga automáticamente la primera vez) ──
+print("Cargando modelo YOLOv8n...")
+yolo_model = YOLO('yolov8n.pt')
+print("Modelo YOLO cargado correctamente.")
 
 
 def login_required(f):
@@ -168,6 +178,62 @@ def provincias():
         "Mallorca", "Menorca", "Ibiza", "Andorra", "Ceuta", "Melilla"
     ]
     return jsonify(sorted(lista))
+
+
+@app.route('/api/detectar', methods=['POST'])
+@login_required
+def detectar():
+    """Recibe una imagen en base64, ejecuta YOLOv8 y devuelve las detecciones."""
+    datos = request.get_json()
+    imagen_b64 = datos.get('image', '')
+
+    if not imagen_b64:
+        return jsonify({'error': 'No se recibió imagen'}), 400
+
+    try:
+        # Decodificar imagen base64
+        if ',' in imagen_b64:
+            imagen_b64 = imagen_b64.split(',')[1]
+
+        img_bytes = base64.b64decode(imagen_b64)
+        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        img_np = np.array(img)
+
+        # Ejecutar YOLO
+        results = yolo_model(img_np, verbose=False)
+
+        # Extraer detecciones
+        detections = []
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                conf = float(box.conf[0])
+                cls_id = int(box.cls[0])
+                cls_name = yolo_model.names[cls_id]
+
+                detections.append({
+                    'class': cls_name,
+                    'class_id': cls_id,
+                    'confidence': round(conf, 3),
+                    'x1': round(x1, 1),
+                    'y1': round(y1, 1),
+                    'x2': round(x2, 1),
+                    'y2': round(y2, 1),
+                    'width': round(x2 - x1, 1),
+                    'height': round(y2 - y1, 1),
+                    'center_x': round((x1 + x2) / 2, 1),
+                    'center_y': round((y1 + y2) / 2, 1)
+                })
+
+        return jsonify({
+            'detections': detections,
+            'image_width': img.width,
+            'image_height': img.height,
+            'total': len(detections)
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Error en detección: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
