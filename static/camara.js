@@ -73,12 +73,50 @@ async function enumerarCamaras() {
     const select = document.getElementById('camera-select');
 
     select.innerHTML = '';
+
+    // Palabras clave para identificar cámaras externas (prioridad)
+    const externalKeywords = ['imou', 'ranger', 'usb', 'external', 'ip cam', 'hikvision', 'dahua', 'reolink'];
+    // Palabras clave para identificar la webcam integrada (evitar)
+    const builtinKeywords = ['integrated', 'built-in', 'front', 'facetime', 'ir camera', 'laptop'];
+
+    let bestIndex = -1;
+
     videoDevices.forEach((dev, i) => {
       const opt = document.createElement('option');
       opt.value = dev.deviceId;
-      opt.textContent = dev.label || `Cámara ${i + 1}`;
+      const label = dev.label || `Cámara ${i + 1}`;
+      opt.textContent = label;
       select.appendChild(opt);
+
+      const labelLower = label.toLowerCase();
+
+      // Buscar cámara externa por nombre
+      if (bestIndex === -1) {
+        const isExternal = externalKeywords.some(kw => labelLower.includes(kw));
+        const isBuiltin = builtinKeywords.some(kw => labelLower.includes(kw));
+
+        if (isExternal) {
+          bestIndex = i; // Prioridad máxima: cámara externa detectada por nombre
+        } else if (!isBuiltin && videoDevices.length > 1 && i > 0) {
+          bestIndex = i; // Prioridad media: no es integrada y no es la primera (la primera suele ser la integrada)
+        }
+      }
     });
+
+    // Si encontramos una cámara externa, seleccionarla
+    if (bestIndex >= 0) {
+      select.selectedIndex = bestIndex;
+      console.log(`Auto-seleccionada cámara externa: ${videoDevices[bestIndex].label}`);
+    } else if (videoDevices.length > 1) {
+      // Si hay varias y no detectamos externa, elegir la última (suele ser la USB)
+      select.selectedIndex = videoDevices.length - 1;
+    }
+
+    // Mostrar cuántas cámaras hay
+    if (videoDevices.length > 1) {
+      setStatus('info', `📹 ${videoDevices.length} cámaras detectadas — seleccionada: ${select.options[select.selectedIndex]?.text}`);
+    }
+
   } catch (e) {
     console.warn('No se pudieron enumerar cámaras:', e);
   }
