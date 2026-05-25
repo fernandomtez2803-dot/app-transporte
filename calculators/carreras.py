@@ -225,8 +225,8 @@ def calcular(destino, peso_real_kg, volumen_m3=None, n_pallets=None, temperatura
 
     resultados = []
 
-    if temperatura == 'controlada' and not es_portugal:
-        tabla_cap = data['capilar_temp_controlada']['espana']
+    if temperatura == 'controlada':
+        tabla_cap = data['capilar_temp_controlada']['portugal' if es_portugal else 'espana']
         tabla_dir = None  # Los directos T.C. no tienen tabla completa
     else:
         tabla_cap = data['capilar_espana_ambiente'] if not es_portugal else data['capilar_portugal_ambiente']
