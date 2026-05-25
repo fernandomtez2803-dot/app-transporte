@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comparador de Tarifas de Transporte — Agroserc</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #222; }
+
+  header {
+    background: linear-gradient(135deg, #1a5276, #2e86c1);
+    color: white; padding: 18px 30px;
+    display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header p { font-size: 0.85rem; opacity: 0.85; margin-top: 2px; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+  .card {
+    background: white; border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 1rem; font-weight: 700; color: #1a5276; margin-bottom: 18px;
+             border-bottom: 2px solid #e8f0fe; padding-bottom: 8px; }
+
+  .form-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 0.82rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-group input, .form-group select {
+    border: 1.5px solid #d0d7e2; border-radius: 6px;
+    padding: 9px 12px; font-size: 0.95rem; color: #222;
+    transition: border-color 0.2s;
+    background: #fafbfc;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none; border-color: #2e86c1; background: white;
+  }
+
+  .opciones-extra {
+    display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid #eee;
+  }
+  .check-group { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .check-group input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+  .check-group label { font-size: 0.88rem; color: #444; cursor: pointer; }
+
+  .btn-calcular {
+    display: block; width: 100%; margin-top: 18px;
+    background: linear-gradient(135deg, #1a5276, #2e86c1);
+    color: white; border: none; border-radius: 8px;
+    padding: 13px; font-size: 1.05rem; font-weight: 700;
+    cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.02em;
+  }
+  .btn-calcular:hover { opacity: 0.92; transform: translateY(-1px); }
+  .btn-calcular:active { transform: translateY(0); }
+  .btn-calcular:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .error-msg { background: #fdf0f0; border: 1px solid #e74c3c; color: #c0392b;
+               border-radius: 6px; padding: 10px 14px; margin-top: 12px; font-size: 0.9rem; }
+
+  /* Resultados */
+  .resultados-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
+  }
+  .resultados-header h2 { font-size: 1rem; font-weight: 700; color: #1a5276; border: none; margin: 0; padding: 0; }
+  .badge-total { background: #e8f0fe; color: #1a5276; font-size: 0.8rem;
+                 padding: 4px 10px; border-radius: 20px; font-weight: 600; }
+
+  .transportistas-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+
+  .card-transportista {
+    border-radius: 10px; border: 2px solid #e2e8f0;
+    padding: 18px; position: relative; transition: box-shadow 0.2s;
+    background: white;
+  }
+  .card-transportista:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .card-transportista.mas-barato { border-color: #27ae60; }
+  .card-transportista.no-aplica { background: #fafafa; border-color: #ddd; opacity: 0.75; }
+
+  .badge-recomendado {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: #27ae60; color: white; font-size: 0.72rem; font-weight: 700;
+    padding: 3px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .transportista-nombre {
+    font-size: 0.95rem; font-weight: 700; color: #2c3e50; margin-bottom: 4px;
+  }
+  .transportista-zona { font-size: 0.78rem; color: #666; margin-bottom: 12px; }
+
+  .precio-grande {
+    font-size: 2.2rem; font-weight: 800; color: #2c3e50; line-height: 1;
+  }
+  .precio-grande.precio-mejor { color: #27ae60; }
+  .precio-unidad { font-size: 0.85rem; color: #666; margin-left: 3px; }
+
+  .diferencia-badge {
+    display: inline-block; font-size: 0.75rem; color: #e74c3c;
+    background: #fdf0f0; border-radius: 4px; padding: 2px 7px; margin-top: 4px;
+  }
+
+  .peso-tasable { font-size: 0.78rem; color: #888; margin-top: 6px; }
+
+  .desglose-toggle {
+    display: block; width: 100%; margin-top: 12px;
+    background: none; border: 1px solid #d0d7e2; border-radius: 6px;
+    padding: 6px; font-size: 0.8rem; color: #555; cursor: pointer;
+    text-align: center; transition: background 0.15s;
+  }
+  .desglose-toggle:hover { background: #f0f4f8; }
+
+  .desglose-panel {
+    display: none; margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed #e0e0e0; font-size: 0.82rem; color: #444;
+  }
+  .desglose-panel.open { display: block; }
+  .desglose-panel p { margin-bottom: 5px; }
+  .desglose-panel strong { color: #2c3e50; }
+  .desglose-panel .aviso { color: #e67e22; font-style: italic; }
+  .desglose-panel .ok { color: #27ae60; }
+  .desglose-panel ul { padding-left: 16px; margin-top: 4px; }
+  .desglose-panel li { margin-bottom: 3px; }
+
+  .no-aplica-msg { font-size: 0.83rem; color: #888; margin-top: 8px; }
+
+  .no-aplicables-section { margin-top: 14px; }
+  .no-aplicables-section summary { cursor: pointer; font-size: 0.85rem; color: #888; }
+
+  /* Autocomplete */
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-list {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+    background: white; border: 1.5px solid #2e86c1; border-top: none;
+    border-radius: 0 0 6px 6px; max-height: 200px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .autocomplete-item {
+    padding: 8px 12px; cursor: pointer; font-size: 0.9rem;
+  }
+  .autocomplete-item:hover, .autocomplete-item.selected { background: #e8f0fe; }
+
+  /* Loading */
+  .spinner { display: none; text-align: center; padding: 20px; color: #666; font-size: 0.9rem; }
+  .spinner.active { display: block; }
+
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .transportistas-grid { grid-template-columns: 1fr; }
+    .precio-grande { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🚛 Comparador de Tarifas de Transporte</h1>
+    <p>Agroserc · Febrero 2025 · RDA Ramoneda · Antonio Marco · Transaher · Carreras</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- FORMULARIO -->
+  <div class="card">
+    <h2>Datos del envío</h2>
+    <div class="form-grid">
+      <div class="form-group autocomplete-wrapper">
+        <label>Destino *</label>
+        <input type="text" id="destino" placeholder="Ej: Madrid, Sevilla, Lisboa..." autocomplete="off">
+        <div class="autocomplete-list" id="autocomplete-list" style="display:none;"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Peso real (kg) *</label>
+        <input type="number" id="peso_kg" placeholder="0" min="0.1" step="0.1">
+      </div>
+
+      <div class="form-group">
+        <label>Volumen (m³)</label>
+        <input type="number" id="volumen_m3" placeholder="0.000" min="0" step="0.001">
+      </div>
+
+      <div class="form-group">
+        <label>Nº pallets</label>
+        <input type="number" id="n_pallets" placeholder="0" min="0" step="1">
+      </div>
+
+      <div class="form-group">
+        <label>Temperatura (Carreras)</label>
+        <select id="temperatura">
+          <option value="ambiente">Ambiente</option>
+          <option value="controlada">Controlada 12-18°C</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="opciones-extra">
+      <label class="check-group">
+        <input type="checkbox" id="llegada_rda">
+        <span>RDA: Envío de llegada (+20%)</span>
+      </label>
+      <label class="check-group">
+        <input type="checkbox" id="importacion_pt">
+        <span>Transaher Portugal: Importación (+15%)</span>
+      </label>
+    </div>
+
+    <button class="btn-calcular" id="btn-calcular" onclick="calcular()">
+      Calcular y comparar precios
+    </button>
+    <div class="error-msg" id="error-msg" style="display:none;"></div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="spinner" id="spinner">Calculando tarifas...</div>
+
+  <!-- RESULTADOS -->
+  <div id="resultados" style="display:none;">
+    <div class="card">
+      <div class="resultados-header">
+        <h2>Comparativa de precios</h2>
+        <span class="badge-total" id="badge-total"></span>
+      </div>
+      <div class="transportistas-grid" id="grid-transportistas"></div>
+
+      <details class="no-aplicables-section" id="no-aplicables-section" style="display:none;">
+        <summary>Transportistas no aplicables</summary>
+        <div id="lista-no-aplica" style="margin-top:10px;"></div>
+      </details>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let provincias = [];
+
+// Cargar lista de provincias para autocompletar
+fetch('/provincias').then(r => r.json()).then(data => {
+  provincias = data;
+});
+
+const inputDestino = document.getElementById('destino');
+const autocompleteList = document.getElementById('autocomplete-list');
+let selectedIdx = -1;
+
+inputDestino.addEventListener('input', () => {
+  const val = inputDestino.value.toLowerCase().trim();
+  autocompleteList.innerHTML = '';
+  selectedIdx = -1;
+  if (val.length < 2) { autocompleteList.style.display = 'none'; return; }
+
+  const matches = provincias.filter(p => p.toLowerCase().includes(val)).slice(0, 8);
+  if (!matches.length) { autocompleteList.style.display = 'none'; return; }
+
+  matches.forEach((m, i) => {
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.textContent = m;
+    item.addEventListener('click', () => {
+      inputDestino.value = m;
+      autocompleteList.style.display = 'none';
+    });
+    autocompleteList.appendChild(item);
+  });
+  autocompleteList.style.display = 'block';
+});
+
+inputDestino.addEventListener('keydown', e => {
+  const items = autocompleteList.querySelectorAll('.autocomplete-item');
+  if (e.key === 'ArrowDown') { selectedIdx = Math.min(selectedIdx + 1, items.length - 1); }
+  else if (e.key === 'ArrowUp') { selectedIdx = Math.max(selectedIdx - 1, 0); }
+  else if (e.key === 'Enter' && selectedIdx >= 0) {
+    inputDestino.value = items[selectedIdx].textContent;
+    autocompleteList.style.display = 'none'; return;
+  } else { return; }
+  items.forEach((it, i) => it.classList.toggle('selected', i === selectedIdx));
+  e.preventDefault();
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrapper')) autocompleteList.style.display = 'none';
+});
+
+// Permitir Enter para calcular
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !autocompleteList.style.display !== 'none') calcular();
+});
+
+async function calcular() {
+  const destino = document.getElementById('destino').value.trim();
+  const peso_kg = parseFloat(document.getElementById('peso_kg').value) || 0;
+  const volumen_m3 = parseFloat(document.getElementById('volumen_m3').value) || 0;
+  const n_pallets = parseInt(document.getElementById('n_pallets').value) || 0;
+  const temperatura = document.getElementById('temperatura').value;
+  const llegada_rda = document.getElementById('llegada_rda').checked;
+  const importacion_pt = document.getElementById('importacion_pt').checked;
+
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+
+  if (!destino) { mostrarError('Indica el destino.'); return; }
+  if (peso_kg <= 0) { mostrarError('El peso debe ser mayor que 0 kg.'); return; }
+
+  document.getElementById('btn-calcular').disabled = true;
+  document.getElementById('spinner').classList.add('active');
+  document.getElementById('resultados').style.display = 'none';
+
+  try {
+    const resp = await fetch('/calcular', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destino, peso_kg, volumen_m3, n_pallets, temperatura, llegada_rda, importacion_pt })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) { mostrarError(data.error || 'Error desconocido'); return; }
+
+    mostrarResultados(data, { destino, peso_kg, volumen_m3, n_pallets });
+  } catch (err) {
+    mostrarError('Error de conexión: ' + err.message);
+  } finally {
+    document.getElementById('btn-calcular').disabled = false;
+    document.getElementById('spinner').classList.remove('active');
+  }
+}
+
+function mostrarError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function mostrarResultados(data, inputs) {
+  const grid = document.getElementById('grid-transportistas');
+  grid.innerHTML = '';
+
+  const badge = document.getElementById('badge-total');
+  badge.textContent = `${data.aplicables.length} de ${data.total_comparados} transportistas aplican`;
+
+  // Tarjetas de aplicables
+  data.aplicables.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'card-transportista' + (r.es_mas_barato ? ' mas-barato' : '');
+
+    const desglose = r.desglose || {};
+    const modalidad = r.modalidad || '';
+    const suplementos = desglose.suplementos || [];
+    const alternativas = desglose.alternativas || [];
+
+    const precioClass = r.es_mas_barato ? 'precio-grande precio-mejor' : 'precio-grande';
+
+    let difHtml = '';
+    if (r.diferencia_pct) {
+      difHtml = `<div class="diferencia-badge">+${r.diferencia_pct}% vs más barato</div>`;
+    }
+
+    let supsHtml = '';
+    if (suplementos.length) {
+      supsHtml = '<ul>' + suplementos.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>';
+    }
+
+    let altHtml = '';
+    if (alternativas.length) {
+      altHtml = '<p><strong>Alternativa:</strong></p>' +
+        alternativas.map(a => `<p>${esc(a.modalidad)}: <strong>${a.precio.toFixed(2)}€</strong> · ${esc(a.desc_precio.substring(0, 80))}</p>`).join('');
+    }
+
+    let modalidadHtml = modalidad ? `<span style="font-size:0.75rem;background:#e8f0fe;padding:2px 7px;border-radius:4px;color:#1a5276;font-weight:600;">${esc(modalidad.toUpperCase())}</span> ` : '';
+
+    card.innerHTML = `
+      ${r.es_mas_barato ? '<div class="badge-recomendado">⭐ Más económico</div>' : ''}
+      <div class="transportista-nombre">${modalidadHtml}${esc(r.transportista)}</div>
+      <div class="transportista-zona">${esc(r.zona || '')}</div>
+      <div class="${precioClass}">${r.precio.toFixed(2)}<span class="precio-unidad">€</span></div>
+      ${difHtml}
+      ${r.peso_tasable ? `<div class="peso-tasable">Peso tasable: ${r.peso_tasable.toFixed(1)} kg</div>` : ''}
+      <button class="desglose-toggle" onclick="toggleDesglose(this)">Ver desglose ▾</button>
+      <div class="desglose-panel">
+        <p><strong>Peso:</strong> ${esc(desglose.peso || '')}</p>
+        <p><strong>Zona:</strong> ${esc(desglose.zona || r.zona || '')}</p>
+        <p><strong>Precio base:</strong> ${esc(desglose.precio_base || '')}</p>
+        ${supsHtml ? '<p><strong>Suplementos:</strong></p>' + supsHtml : ''}
+        <p><strong>Total (sin IVA):</strong> ${esc(desglose.total || '')}</p>
+        ${desglose.aviso ? `<p class="aviso">⚠ ${esc(desglose.aviso)}</p>` : ''}
+        ${altHtml}
+        <p style="margin-top:8px;"><span class="aviso">⚠ ${esc(desglose.combustible || 'Suplemento combustible no incluido.')}</span></p>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // No aplicables
+  const noAplSec = document.getElementById('no-aplicables-section');
+  const listaNA = document.getElementById('lista-no-aplica');
+  listaNA.innerHTML = '';
+
+  if (data.no_aplicables.length) {
+    noAplSec.style.display = 'block';
+    data.no_aplicables.forEach(r => {
+      const p = document.createElement('p');
+      p.style.cssText = 'font-size:0.83rem;color:#888;padding:5px 0;border-bottom:1px solid #eee;';
+      p.innerHTML = `<strong>${esc(r.transportista)}</strong>: ${esc(r.motivo || 'No aplicable')}`;
+      listaNA.appendChild(p);
+    });
+  } else {
+    noAplSec.style.display = 'none';
+  }
+
+  document.getElementById('resultados').style.display = 'block';
+  document.getElementById('resultados').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function toggleDesglose(btn) {
+  const panel = btn.nextElementSibling;
+  const open = panel.classList.toggle('open');
+  btn.textContent = open ? 'Ocultar desglose ▴' : 'Ver desglose ▾';
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
